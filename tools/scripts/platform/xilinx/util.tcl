@@ -201,12 +201,13 @@ proc _init_ps {cpu} {
 		}
 
 		"psu_cortexa53_0" {
-			targets -set -nocase -filter {name =~ "*A53*#0" && jtag_cable_name =~ "*$::jtagtarget*"}
-			rst -processor
-			dow $::fsbl_file
-			set bp_16_41_fsbl_bp [bpadd -addr &XFsbl_Exit]
-			con -block -timeout 60
-			bpremove $bp_16_41_fsbl_bp
+			targets -set -nocase -filter {name =~ "PSU" && jtag_cable_name =~ "*$::jtagtarget*"}
+			psu_init
+			catch {psu_post_config}
+			catch {psu_ps_pl_reset_config}
+			catch {psu_ps_pl_isolation_removal}
+			mwr 0xffff0000 0x14000000
+			mwr 0xFD1A0104 0x380E
 			targets -set -filter {name =~ "Cortex-A53 #0" && jtag_cable_name =~ "*$::jtagtarget*"}
 		}
 		"psu_cortexr5_0" {

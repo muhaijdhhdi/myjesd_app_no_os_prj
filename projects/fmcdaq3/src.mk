@@ -11,7 +11,8 @@
 
 # Uncomment to select the profile
 
-SRCS += $(PROJECT)/src/app/fmcdaq3.c
+APP_SRC ?= $(PROJECT)/src/app/fh8052.c
+SRCS += $(APP_SRC)
 SRCS += $(DRIVERS)/axi_core/axi_adc_core/axi_adc_core.c \
 	$(DRIVERS)/axi_core/axi_dac_core/axi_dac_core.c \
 	$(DRIVERS)/axi_core/axi_dmac/axi_dmac.c \

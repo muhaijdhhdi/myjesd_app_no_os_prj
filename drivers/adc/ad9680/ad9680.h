@@ -74,6 +74,9 @@
 #define AD9680_SYSREF_CONT 1	/* Continuous Sysref Synchronisation */
 #define AD9680_SYSREF_MON 3	/* SYSREF monitor Mode */
 
+#define AD9680_QUICK_CFG_M1_L2_F1	0x40
+#define AD9680_QUICK_CFG_M2_L4_F1	0x88
+
 struct ad9680_dev {
 	/* SPI */
 	struct no_os_spi_desc	*spi_desc;
@@ -92,6 +95,7 @@ struct ad9680_init_param {
 	struct no_os_spi_init_param	spi_init;
 	/* Device Settings */
 	uint32_t	lane_rate_kbps;
+	uint8_t		quick_config;
 
 	struct jesd204_link jesd204_link;
 	unsigned long long sampling_frequency_hz;

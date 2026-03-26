@@ -258,7 +258,9 @@ int32_t ad9680_setup(struct ad9680_dev **device,
 			 0x2f);	// subclass-1, N'=16
 	ad9680_spi_write(dev,
 			 AD9680_REG_JESD204B_QUICK_CONFIG,
-			 0x88);	// m=2, l=4, f= 1
+			 init_param->quick_config ?
+			 init_param->quick_config :
+			 AD9680_QUICK_CFG_M2_L4_F1);
 	if (init_param->lane_rate_kbps < 6250000)
 		ad9680_spi_write(dev,
 				 AD9680_REG_JESD204B_LANE_RATE_CTRL,
@@ -333,7 +335,9 @@ int32_t ad9680_setup_jesd_fsm(struct ad9680_dev **device,
 			 0x2f);	// subclass-1, N'=16
 	ad9680_spi_write(dev,
 			 AD9680_REG_JESD204B_QUICK_CONFIG,
-			 0x88);	// m=2, l=4, f= 1
+			 init_param->quick_config ?
+			 init_param->quick_config :
+			 AD9680_QUICK_CFG_M2_L4_F1);
 	if (init_param->lane_rate_kbps < 6250000)
 		ad9680_spi_write(dev,
 				 AD9680_REG_JESD204B_LANE_RATE_CTRL,
