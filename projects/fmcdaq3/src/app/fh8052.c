@@ -37,10 +37,12 @@ static uint16_t adc_buffer[BUFFER_SAMPLES] __attribute__((aligned(1024)));
 #define AD9680_REG_JESD204B_LANE_POWERDOWN	0x5B0
 
 /*
- * FMC1 debug build:
- * use a single AD9680 converter over two JESD lanes at 12.5 Gbps.
- * The PL is expected to remap the physically connected pair as logical lane0/1.
+ * Default build targets the working FMC2 route.
+ * Define FMC1 (or FH8052_USE_FMC1) to use the FMC1 wiring, where physical
+ * AD9680 SERDOUT2/3 must be presented to the PL as logical lane0/1.
  */
+//#define FMC1 
+
 #define FH8052_ADC_ACTIVE_LANES		2
 #define FH8052_ADC_ACTIVE_CHANNELS	1
 #define FH8052_RX_LANE_RATE_KHZ		12333333U
@@ -52,6 +54,9 @@ static uint16_t adc_buffer[BUFFER_SAMPLES] __attribute__((aligned(1024)));
 #define FH8052_RX_HALF_LANE_RATE_KHZ	6166667U
 #define FH8052_RX_HALF_REF_CLK_KHZ	308333U
 #define FH8052_RX_HALF_DEVICE_CLK_KHZ	(FH8052_RX_HALF_LANE_RATE_KHZ / 40U)
+#define FH8052_FMC1_LANE_POWERDOWN	0xAF
+#define FH8052_JESD_LANE0_ASSIGN	0x00
+#define FH8052_JESD_LANE1_ASSIGN	0x11
 
 static void ad9528_config_channel(struct ad9528_channel_spec *channel,
 				  uint8_t channel_num,
@@ -153,6 +158,49 @@ static int32_t ad9680_log_lane_assign(struct ad9680_dev *dev, const char *tag)
 	       tag, lane_pd, serd0, serd1, serd2, serd3);
 
 	return 0;
+}
+
+static int32_t fh8052_config_lane_route(struct ad9680_dev *dev)
+{
+#if defined(FMC1) || defined(FH8052_USE_FMC1)
+	int32_t ret;
+
+	printf("AD9680 route: FMC1, physical SERDOUT2/3 -> logical lane0/1\n");
+
+	ret = ad9680_spi_write(dev, AD9680_REG_JESD204B_LANE_POWERDOWN,
+			       FH8052_FMC1_LANE_POWERDOWN);
+	if (ret)
+		return ret;
+
+	/*
+	 * FMC1 physically uses SERDOUT2/3. Map them to logical lane0/1 so the
+	 * PL still receives data on rx_data_0/rx_data_1 in the 2-lane design.
+	 */
+	ret = ad9680_spi_write(dev, AD9680_REG_JESD204B_LANE_SERD_OUT0_ASSIGN,
+			       FH8052_JESD_LANE0_ASSIGN);
+	if (ret)
+		return ret;
+
+	ret = ad9680_spi_write(dev, AD9680_REG_JESD204B_LANE_SERD_OUT1_ASSIGN,
+			       FH8052_JESD_LANE1_ASSIGN);
+	if (ret)
+		return ret;
+
+	ret = ad9680_spi_write(dev, AD9680_REG_JESD204B_LANE_SERD_OUT2_ASSIGN,
+			       FH8052_JESD_LANE0_ASSIGN);
+	if (ret)
+		return ret;
+
+	ret = ad9680_spi_write(dev, AD9680_REG_JESD204B_LANE_SERD_OUT3_ASSIGN,
+			       FH8052_JESD_LANE1_ASSIGN);
+	if (ret)
+		return ret;
+
+	return ad9680_log_lane_assign(dev, "fmc1-serdout23");
+#else
+	printf("AD9680 route: FMC2 default, physical SERDOUT0/1 -> logical lane0/1\n");
+	return ad9680_log_lane_assign(dev, "default");
+#endif
 }
 
 static void jesd204_rx_log_debug(struct axi_jesd204_rx *jesd)
@@ -355,6 +403,26 @@ static void jesd204_rx_scan_lmfc_offset(struct axi_jesd204_rx *jesd,
 	       (best_offset == original_offset) ? " (original)" : "");
 }
 
+static uint8_t fh8052_read_menu_choice(void)
+{
+	int ch;
+
+	do {
+		ch = getc(stdin);
+	} while (ch == '\r' || ch == '\n');
+
+	printf("%c\n", ch);
+
+	while (1) {
+		int tail = getc(stdin);
+
+		if (tail == '\r' || tail == '\n')
+			break;
+	}
+
+	return (uint8_t)ch;
+}
+
 
 static void fh8052_select_sampling_mode(struct ad9528_platform_data *ad9528_pdata,
 					struct ad9680_init_param *ad9680_param,
@@ -369,8 +437,7 @@ static void fh8052_select_sampling_mode(struct ad9528_platform_data *ad9528_pdat
 	printf("\t2 - 616.666 MSPS (lane rate 6.166667 Gbps)\n");
 	printf("Choice [1/2/3]: ");
 
-	mode = getc(stdin);
-	printf("%c\n", mode);
+	mode = fh8052_read_menu_choice();
 
 	switch (mode) {
 	case '2':
@@ -414,6 +481,29 @@ static void fh8052_select_sampling_mode(struct ad9528_platform_data *ad9528_pdat
 		ad9528_pdata->channels[2].channel_divider = 2;
 		ad9528_pdata->channels[4].channel_divider = 1;
 		ad9528_pdata->channels[6].channel_divider = 2;
+		break;
+	}
+}
+
+static void fh8052_select_rx_equalization_mode(struct adxcvr_init *ad9680_xcvr_param)
+{
+	uint8_t mode = 0;
+
+	printf("Select RX equalization mode:\n");
+	printf("\t1 - LPM\n");
+	printf("\t2 - DFE\n");
+	printf("Choice [1/2]: ");
+
+	mode = fh8052_read_menu_choice();
+
+	switch (mode) {
+	case '2':
+		ad9680_xcvr_param->lpm_enable = 0;
+		printf("Selected DFE mode\n");
+		break;
+	default:
+		ad9680_xcvr_param->lpm_enable = 1;
+		printf("Selected LPM mode\n");
 		break;
 	}
 }
@@ -520,7 +610,8 @@ int main(void)
 	struct adxcvr_init ad9680_xcvr_param = {
 		.name = "ad9680_xcvr",
 		.base = XPAR_AXI_AD9680_XCVR_BASEADDR,
-		.sys_clk_sel = ADXCVR_SYS_CLK_CPLL,
+		//.sys_clk_sel = ADXCVR_SYS_CLK_CPLL,
+		.sys_clk_sel=ADXCVR_SYS_CLK_QPLL0,
 		.out_clk_sel = ADXCVR_REFCLK_DIV2,
 		.lpm_enable = 1,
 		.ref_rate_khz = FH8052_RX_REF_CLK_KHZ,
@@ -699,6 +790,7 @@ int main(void)
 				    &ad9680_param,
 				    &ad9680_xcvr_param,
 				    &ad9680_jesd_param);
+	fh8052_select_rx_equalization_mode(&ad9680_xcvr_param);
 
 	/* Reconfigure the default JESD configurations */
 	ad9680_jesd_param.lane_clk_khz = ad9680_xcvr_param.lane_rate_khz;
@@ -743,9 +835,11 @@ int main(void)
 		printf("error: ad9680_setup() failed\n");
 		return status;
 	} else {
-		status = ad9680_log_lane_assign(ad9680_device, "default");
-		if (status)
-			printf("AD9680 lane assign read failed: %"PRIi32"\n", status);
+		status = fh8052_config_lane_route(ad9680_device);
+		if (status) {
+			printf("AD9680 lane route setup failed: %"PRIi32"\n", status);
+			return status;
+		}
 	}
 //	status = axi_jesd204_tx_init(&ad9152_jesd, &ad9152_jesd_param);
 //	if (status != 0) {
