@@ -1,0 +1,12 @@
+从官方的no-os库克隆下来并编译构建的步骤
+1.git clone https://github.com/muhaijdhhdi/myjesd_app_no_os_prj ~/vivado-project/high-speed/zu9/adi-example-prj/no-os
+2.cd ~/vivado-project/high-speed/zu9/adi-example-prj/no-os/projects/fmcdaq3
+3.将.xsa copy到这里，然后再进行将vitis环境source到这里， source /home/hwt/tool/xilinx-2025-unified/2025.1/Vitis/settings64.sh
+4.make
+5.编译失败,需要先make reset后再make,生成BOOT.BIN,fmcdaq3.elf
+6.将程序烧写到FPGA 
+source /home/hwt/tool/xilinx-2025-unified/2025.1/Vitis/settings64.sh
+  cd /home/hwt/vivado-project/high-speed/zu9/adi-example-prj/no-os/projects/
+  fmcdaq3
+  make run -j1
+  make run已经修改了，确保能够下载数据下去
